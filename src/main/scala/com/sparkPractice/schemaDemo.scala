@@ -18,7 +18,7 @@ object schemaDemo {
 
     var schema_list = List(("id" , "Int"),("name","String"),("percentage","Double"))
     var schema = new StructType()
-    schema_list.map(line => schema = schema.add(line._1 , line._2))
+    schema_list.foreach(line => schema = schema.add(line._1 , line._2))
     val students = spark.createDataFrame(stud_rdd , schema)
     students.show()
 
