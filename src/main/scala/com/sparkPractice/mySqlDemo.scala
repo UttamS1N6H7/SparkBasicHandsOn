@@ -12,13 +12,21 @@ object mySqlDemo {
       .option("url", "jdbc:mysql://localhost:3306/sakila")
       .option("driver", "com.mysql.jdbc.Driver")
       .option("dbtable", s"( $sqlQuery) t")
-      .option("user", "root").
-      option("password", "uttam123")
+      .option("user", "root")
+      .option("password", "uttam123")
       .load()
 
     dataframe_mysql.show()
     dataframe_mysql.printSchema()
 
+   dataframe_mysql.write.format("jdbc")
+      .mode("overwrite")
+      .option("url", "jdbc:mysql://localhost:3306/sakila")
+      .option("driver", "com.mysql.jdbc.Driver")
+      .option("dbtable", "sakila.testDemo")
+      .option("user", "root")
+      .option("password", "uttam123")
+      .save()
 
   }
 
