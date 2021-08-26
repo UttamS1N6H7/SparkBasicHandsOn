@@ -12,7 +12,7 @@ object fileGBBU {
 
   def main(args: Array[String]): Unit = {
 
-//    val path = "C:\\SparkProject\\InputFiles\\Billing"
+    //val path = "C:\\SparkProject\\InputFiles\\Billing"
     val files = new File(working_dir).list.toList // gives list of file names including extensions in the path `path`
 
     println(files)
@@ -29,32 +29,36 @@ object fileGBBU {
       //val invoiceId: Column = col(f.toString)
       //val working_dir_length: Int = working_dir.length + 1
 
-      //readBBU.show(truncate = false)
+      readBBU.show(truncate = false)
       //readBBU.printSchema()
       //println(readBBU.columns.size)
       //if ()
       if(readBBU.columns.size == 72)
         {
           println("It's GBBU")
-          if(col("_c0") === "ADJUSTMENTS")
-            callGBBUFunction(readBBU)
-          else
+          if(readBBU.filter(col("_c0") === "ADJUSTMENTS").count() > 0) {
+            callGBBUFunctionAdj(readBBU)
+          } else
             println("There is no Adjustments records")
         }
-        else
-        println("It's CBBU")
+      else
+        {
+          println("It's CBBU")
+          callCBBUFunctionAdj(readBBU)
+        }
+
 
     }
 
   }
 
-  def callGBBUFunction(inputDF: DataFrame) = {
+  def callGBBUFunctionAdj(inputDF: DataFrame) = {
 
     import org.apache.spark.sql.functions.udf
 
     val filterGBBU = inputDF.filter(col("_c0") === "ADJUSTMENTS")
     filterGBBU.show(truncate = false)
-    filterGBBU.printSchema()
+    //filterGBBU.printSchema()
 
     /**val schemaAdj = Seq(("AdjustementCategory", "TariffName", "AdjustementSubCategory",
       "ChargeDescription", "ReasonText", "AdjustementDate", "EndDate", "addressLine1",
@@ -137,8 +141,97 @@ object fileGBBU {
       "CircuitNumber","MDFsite","RoomPSI","ServiceId","EventClassName",
       "EventName","CBUKReferenceNumber","EventSourceId","MACCode","FreeText",
       "TRCStartDate","ClearCode","TRCDescriptionCode","PriceLineId","PriceLineDescription")
-    //addColDF.write.format("csv").mode("append").save("C:\\SparkProject\\OutputFiles\\GBBU_csv")
+    selectDF.write.format("csv").mode("append").save("C:\\SparkProject\\OutputFiles\\GBBU_CBBU")
     selectDF.show()
+  }
+
+  def callCBBUFunctionAdj(inputDF: DataFrame) = {
+    import org.apache.spark.sql.functions.udf
+
+    val filterAdjCBBU = inputDF.filter(col("_c0") === "ADJUSTMENTS")
+    filterAdjCBBU.show(truncate = false)
+    //filterCBBU.printSchema()
+
+    spark.udf.register("get_only_file_name", (fullPath: String) => fullPath.split("/").last)
+
+    val schemaAdjCBBU = new StructType(
+      Array(
+        StructField("RecordType", StringType, false),
+        StructField("AdjustementCategory", StringType, false),
+        StructField("AdjustementSubCategory", StringType, false),
+        StructField("AdjustementDate", StringType, true),
+        StructField("AdjustmentAmount", StringType, true),
+        StructField("TaxIdentifierForVAT", StringType, true)
+      )
+    )
+
+    val newColToAddAdjCBBU = List(("InvoiceId", expr("get_only_file_name(input_file_name())")),
+        ("InvoiceVersion",expr("get_only_file_name(input_file_name())")),
+        ("BillingAccountNumber",expr("get_only_file_name(input_file_name())")),
+        ("InvoiceProductionDate",expr("current_timestamp()")),
+        ("InvoiceScheduledDate",expr("current_timestamp()")),
+        ("InvoiceStatus", lit("created")),
+        ("TariffName", lit(null).cast(StringType)),
+        ("ChargeDescription",lit(null).cast(StringType)),
+        ("ReasonText",lit(null).cast(StringType)),
+        ("EndDate",lit(null).cast(StringType)),
+        ("addressLine1",lit(null).cast(StringType)),
+        ("zipCode",lit(null).cast(StringType)),
+        ("CSSJobNumber",lit(null).cast(StringType)),
+        ("CustomerOrderNumber1",lit(null).cast(StringType)),
+        ("CustomerOrderNumber2",lit(null).cast(StringType))
+    )
+
+    val newColToAddAdjCBBU2 = List(("Quantity",lit(null).cast(StringType)),
+        ("Units",lit(null).cast(StringType)),
+        ("UnitRate",lit(null).cast(StringType)),
+        ("CSSAccountNumber",lit(null).cast(StringType)),
+        ("ProductType",lit(null).cast(StringType)),
+        ("ORServiceId",lit(null).cast(StringType)),
+        ("CircuitNumber",lit(null).cast(StringType)),
+        ("MDFsite",lit(null).cast(StringType)),
+        ("RoomPSI",lit(null).cast(StringType)),
+        ("ServiceId",lit(null).cast(StringType)),
+        ("EventClassName",lit(null).cast(StringType)),
+        ("EventName",lit(null).cast(StringType)),
+        ("CBUKReferenceNumber",lit(null).cast(StringType)),
+        ("EventSourceId",lit(null).cast(StringType)),
+        ("MACCode",lit(null).cast(StringType)),
+        ("FreeText",lit(null).cast(StringType)),
+        ("TRCStartDate",lit(null).cast(StringType)),
+        ("ClearCode",lit(null).cast(StringType)),
+        ("TRCDescriptionCode",lit(null).cast(StringType)),
+        ("PriceLineId",lit(null).cast(StringType)),
+        ("PriceLineDescription",lit(null).cast(StringType))
+    )
+
+
+    val rddAdjCBBU = filterAdjCBBU.rdd
+    val renamedAdjCBBU = spark.sqlContext.createDataFrame(rddAdjCBBU , schemaAdjCBBU)
+    //val addColDF = renamedDF.withColumn("InvoiceId", get_only_file_name(input_file_name()).substr(1,14))
+    renamedAdjCBBU.show(truncate = false)
+    val addedColAdjCBBU = newColToAddAdjCBBU.foldLeft(renamedAdjCBBU) {
+      (tempdf, cols) => tempdf.withColumn(cols._1, cols._2)
+    }
+    addedColAdjCBBU.show(truncate = false)
+
+    val addedColAdjCBBU2 = newColToAddAdjCBBU2.foldLeft(addedColAdjCBBU) {
+      (tempdf, cols) => tempdf.withColumn(cols._1, cols._2)
+    }
+    val selectAdjDF = addedColAdjCBBU2.select("RecordType","InvoiceId","InvoiceVersion","BillingAccountNumber","InvoiceProductionDate",
+      "InvoiceScheduledDate","InvoiceStatus","AdjustementCategory","TariffName",
+      "AdjustementSubCategory","ChargeDescription","ReasonText","AdjustementDate",
+      "EndDate","addressLine1","zipCode","CSSJobNumber","CustomerOrderNumber1",
+      "CustomerOrderNumber2","Quantity","Units","UnitRate","AdjustmentAmount",
+      "TaxIdentifierForVAT","CSSAccountNumber","ProductType","ORServiceId",
+      "CircuitNumber","MDFsite","RoomPSI","ServiceId","EventClassName",
+      "EventName","CBUKReferenceNumber","EventSourceId","MACCode","FreeText",
+      "TRCStartDate","ClearCode","TRCDescriptionCode","PriceLineId","PriceLineDescription")
+
+    selectAdjDF.write.format("csv").mode("append").save("C:\\SparkProject\\OutputFiles\\GBBU_CBBU")
+
+    selectAdjDF.show(truncate = false)
+
   }
 
 }
